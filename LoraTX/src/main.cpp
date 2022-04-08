@@ -1,165 +1,246 @@
 #include <Arduino.h>
+#include <TinyGPSPlus.h>
+//#include <SoftwareSerial.h>
 #include <HardwareSerial.h>
 
 
-#include <TinyGPS.h>
-
-/* This sample code demonstrates the normal use of a TinyGPS object.
+/*
+   This sample code demonstrates just about every built-in operation of TinyGPSPlus (TinyGPSPlus).
    It requires the use of SoftwareSerial, and assumes that you have a
    4800-baud serial GPS device hooked up on pins 4(rx) and 3(tx).
 */
+static const int gRXPin = 18, gTXPin = 19;
+static const uint32_t GPSBaud = 9600;
 
-TinyGPS gps;
-HardwareSerial ss(1);
+// The TinyGPSPlus object
+TinyGPSPlus gps;
 
-static void smartdelay(unsigned long ms);
-static void print_float(float val, float invalid, int len, int prec);
-static void print_int(unsigned long val, unsigned long invalid, int len);
-static void print_date(TinyGPS &gps);
-static void print_str(const char *str, int len);
+// The serial connection to the GPS device
+HardwareSerial lora(1);
+HardwareSerial ss(2);
+
+//timekeeping
+int last = 0;
+int messageFreq = 2000;
+
+
+//vars [year, month, day, hour, second, altitude, lat, long, heading, speed, numSatellites]
+String contents;
+char delim = ',';
+String na = "x";
+int year;
+int month;
+int day;
+int hour;
+int minute;
+int second;
+float alt;
+double lat;
+double lng;
+int heading;
+float speed;
+int numSats;
+
+bool hourGood = false;
+bool minuteGood = false;
+bool secondGood = false;
+bool altGood = false;
+bool latGood = false;
+bool lngGood = false;
+bool headingGood = false;
+bool speedGood = false;
+bool numSatsGood = false;
+
+void checkForNans(){
+  if(hourGood == true){
+    contents = String(hour);
+  }
+  else{
+    contents = na;
+  }
+  
+  if(minuteGood){
+    contents = contents + delim + String(minute);
+  }
+  else{
+    contents = contents + delim + na;
+  } 
+
+  if(secondGood){
+    contents = contents + delim + second;
+  }
+  else{
+    contents = contents + delim + na;
+  } 
+
+  if(altGood){
+    contents = contents + delim + alt;
+  }
+  else{
+    contents = contents + delim + na;
+  } 
+
+  if(latGood){
+    contents = contents + delim + String(lat,6);
+  }
+  else{
+    contents = contents + delim + na;
+  } 
+
+  if(lngGood){
+    contents = contents + delim + lng;
+  }
+  else{
+    contents = contents + delim + na;
+  } 
+  if(headingGood){
+    contents = contents + delim + heading;
+  }
+  else{
+    contents = contents + delim + na;
+  } 
+  if(speedGood){
+    contents = contents + delim + speed;
+  }
+  else{
+    contents = contents + delim + na;
+  } 
+  if(numSatsGood){
+    contents = contents + delim + numSats;
+  }
+  else{
+    contents = contents + delim + na;
+  } 
+}
 
 void setup()
 {
   Serial.begin(9600);
+  lora.begin(9600, SERIAL_8N1, 16, 17);
+  ss.begin(GPSBaud, SERIAL_8N1, gRXPin, gTXPin);
   
-  Serial.print("Testing TinyGPS library v. "); Serial.println(TinyGPS::library_version());
-  Serial.println("by Mikal Hart");
+  Serial.println(F("KitchenSink.ino"));
+  Serial.println(F("Demonstrating nearly every feature of TinyGPSPlus"));
+  Serial.print(F("Testing TinyGPSPlus library v. ")); Serial.println(TinyGPSPlus::libraryVersion());
+  Serial.println(F("by Mikal Hart"));
   Serial.println();
-  Serial.println("Sats HDOP Latitude  Longitude  Fix  Date       Time     Date Alt    Course Speed Card  Distance Course Card  Chars Sentences Checksum");
-  Serial.println("          (deg)     (deg)      Age                      Age  (m)    --- from GPS ----  ---- to London  ----  RX    RX        Fail");
-  Serial.println("-------------------------------------------------------------------------------------------------------------------------------------");
-
-  ss.begin(4800, SERIAL_8N1, 1,3);
+  
 }
 
 void loop()
 {
-  float flat, flon;
-  unsigned long age, date, time, chars = 0;
-  unsigned short sentences = 0, failed = 0;
-  static const double LONDON_LAT = 51.508131, LONDON_LON = -0.128002;
   
-  print_int(gps.satellites(), TinyGPS::GPS_INVALID_SATELLITES, 5);
-  print_int(gps.hdop(), TinyGPS::GPS_INVALID_HDOP, 5);
-  gps.f_get_position(&flat, &flon, &age);
-  print_float(flat, TinyGPS::GPS_INVALID_F_ANGLE, 10, 6);
-  print_float(flon, TinyGPS::GPS_INVALID_F_ANGLE, 11, 6);
-  print_int(age, TinyGPS::GPS_INVALID_AGE, 5);
-  print_date(gps);
-  print_float(gps.f_altitude(), TinyGPS::GPS_INVALID_F_ALTITUDE, 7, 2);
-  print_float(gps.f_course(), TinyGPS::GPS_INVALID_F_ANGLE, 7, 2);
-  print_float(gps.f_speed_kmph(), TinyGPS::GPS_INVALID_F_SPEED, 6, 2);
-  print_str(gps.f_course() == TinyGPS::GPS_INVALID_F_ANGLE ? "*** " : TinyGPS::cardinal(gps.f_course()), 6);
-  print_int(flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0xFFFFFFFF : (unsigned long)TinyGPS::distance_between(flat, flon, LONDON_LAT, LONDON_LON) / 1000, 0xFFFFFFFF, 9);
-  print_float(flat == TinyGPS::GPS_INVALID_F_ANGLE ? TinyGPS::GPS_INVALID_F_ANGLE : TinyGPS::course_to(flat, flon, LONDON_LAT, LONDON_LON), TinyGPS::GPS_INVALID_F_ANGLE, 7, 2);
-  print_str(flat == TinyGPS::GPS_INVALID_F_ANGLE ? "*** " : TinyGPS::cardinal(TinyGPS::course_to(flat, flon, LONDON_LAT, LONDON_LON)), 6);
+  // Dispatch incoming characters
+  while (ss.available() > 0)
+    gps.encode(ss.read());
 
-  gps.stats(&chars, &sentences, &failed);
-  print_int(chars, 0xFFFFFFFF, 6);
-  print_int(sentences, 0xFFFFFFFF, 10);
-  print_int(failed, 0xFFFFFFFF, 9);
-  Serial.println();
+  if (gps.location.isUpdated())
+  {
+    latGood = true;
+    lngGood = true;
+    lat = gps.location.lat();
+    lng = gps.location.lng();
+    Serial.print("true")
+    
+  }
+  else{
+    latGood = false;
+    lngGood = false;
+  }
+
+  /*
+  if (gps.date.isUpdated())
+  {
+    year = gps.date.year();
+    month = gps.date.month();
+    day = gps.date.day();
+  }
+  else{
+    //year = na;
+    //month = na;
+    //day = na;
+  }
+  */
+
+  if (gps.time.isUpdated())
+  {
+    hourGood = true;
+    minuteGood = true;
+    secondGood = true;
+    hour = gps.time.hour();
+    minute = gps.time.minute();
+    second = gps.time.second();
+    Serial.print(second);
+  }
+  else{
+    hourGood = false;
+    minuteGood = false;
+    secondGood = false;
+  }
+
+  if (gps.speed.isUpdated())
+  {
+    speedGood = true;
+    speed = gps.speed.mps();
+  }
+  else{
+    speedGood = false;
+  }
+
+  if (gps.course.isUpdated())
+  {
+    headingGood = true;
+    heading = gps.course.deg();
+  }
+  else{
+    headingGood = false;
+  }
+
+  if (gps.altitude.isUpdated())
+  {
+    altGood = true;
+    alt = gps.altitude.meters();
+  }
+  else{
+    altGood = false;
+  }
+
+  if (gps.satellites.isUpdated())
+  {
+    numSatsGood = true;
+    numSats = gps.satellites.value(); 
+  }
+  else{
+    numSatsGood = false;
+  }
+  //vars [year, month, day, hour, minute, second, altitude, lat, long, heading, speed, numSatellites]
+  //contents = String(hour) + delim + String(minute) + delim + String(second) + delim + String(alt) + delim + String(lat,6) + delim + String(lng,6) + delim +String(heading) + delim +String(speed) + delim +String(numSats);
   
-  smartdelay(1000);
-}
-
-static void smartdelay(unsigned long ms)
-{
-  unsigned long start = millis();
-  do 
-  {
-    while (ss.available())
-      gps.encode(ss.read());
-  } while (millis() - start < ms);
-}
-
-static void print_float(float val, float invalid, int len, int prec)
-{
-  if (val == invalid)
-  {
-    while (len-- > 1)
-      Serial.print('*');
-    Serial.print(' ');
+  //Serial.println(contents);
+  if(millis() - last > messageFreq){
+    last = millis();
+    checkForNans();
+    Serial.println("Here: ");
+    Serial.print(contents);
+    lora.println(contents);
   }
-  else
-  {
-    Serial.print(val, prec);
-    int vi = abs((int)val);
-    int flen = prec + (val < 0.0 ? 2 : 1); // . and -
-    flen += vi >= 1000 ? 4 : vi >= 100 ? 3 : vi >= 10 ? 2 : 1;
-    for (int i=flen; i<len; ++i)
-      Serial.print(' ');
-  }
-  smartdelay(0);
-}
-
-static void print_int(unsigned long val, unsigned long invalid, int len)
-{
-  char sz[32];
-  if (val == invalid)
-    strcpy(sz, "*******");
-  else
-    sprintf(sz, "%ld", val);
-  sz[len] = 0;
-  for (int i=strlen(sz); i<len; ++i)
-    sz[i] = ' ';
-  if (len > 0) 
-    sz[len-1] = ' ';
-  Serial.print(sz);
-  smartdelay(0);
-}
-
-static void print_date(TinyGPS &gps)
-{
-  int year;
-  byte month, day, hour, minute, second, hundredths;
-  unsigned long age;
-  gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &age);
-  if (age == TinyGPS::GPS_INVALID_AGE)
-    Serial.print("********** ******** ");
-  else
-  {
-    char sz[32];
-    sprintf(sz, "%02d/%02d/%02d %02d:%02d:%02d ",
-        month, day, year, hour, minute, second);
-    Serial.print(sz);
-  }
-  print_int(age, TinyGPS::GPS_INVALID_AGE, 5);
-  smartdelay(0);
-}
-
-static void print_str(const char *str, int len)
-{
-  int slen = strlen(str);
-  for (int i=0; i<len; ++i)
-    Serial.print(i<slen ? str[i] : ' ');
-  smartdelay(0);
 }
 
 /*
-//#include <PacketSerial.h>
-
-HardwareSerial lora(1);
-//PacketSerial myPacketSerial;
-
-
-//uint8_t packet = 0X01010101;
-String packet;
-
 void onPacketReceived(const uint8_t* buffer, size_t size)
 {
   //memcpy(&rxbuf, buffer, 1);
 }
 
 void setup() {
-  lora.begin(9600, SERIAL_8N1, 16, 17);
+  
   //myPacketSerial.setStream(&lora);
   //myPacketSerial.setPacketHandler(&onPacketReceived);
 }
 
 void loop(){
   packet = String(random(100));
-  lora.println(packet);
+  
   delay(1000);
 }
 */
