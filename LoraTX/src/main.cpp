@@ -119,11 +119,7 @@ void setup()
   lora.begin(9600, SERIAL_8N1, 16, 17);
   ss.begin(GPSBaud, SERIAL_8N1, gRXPin, gTXPin);
   
-  Serial.println(F("KitchenSink.ino"));
-  Serial.println(F("Demonstrating nearly every feature of TinyGPSPlus"));
-  Serial.print(F("Testing TinyGPSPlus library v. ")); Serial.println(TinyGPSPlus::libraryVersion());
-  Serial.println(F("by Mikal Hart"));
-  Serial.println();
+  Serial.print("setup loop complete");
   
 }
 
@@ -134,94 +130,25 @@ void loop()
   while (ss.available() > 0)
     gps.encode(ss.read());
 
-  if (gps.location.isUpdated())
-  {
-    latGood = true;
-    lngGood = true;
-    lat = gps.location.lat();
-    lng = gps.location.lng();
-    Serial.print("true")
-    
-  }
-  else{
-    latGood = false;
-    lngGood = false;
-  }
+  lat = gps.location.lat();
+  lng = gps.location.lng();
+  hour = gps.time.hour();
+  minute = gps.time.minute();
+  second = gps.time.second();
+  speed = gps.speed.mps();
+  heading = gps.course.deg();
+  alt = gps.altitude.meters();
+  numSats = gps.satellites.value(); 
 
-  /*
-  if (gps.date.isUpdated())
-  {
-    year = gps.date.year();
-    month = gps.date.month();
-    day = gps.date.day();
-  }
-  else{
-    //year = na;
-    //month = na;
-    //day = na;
-  }
-  */
-
-  if (gps.time.isUpdated())
-  {
-    hourGood = true;
-    minuteGood = true;
-    secondGood = true;
-    hour = gps.time.hour();
-    minute = gps.time.minute();
-    second = gps.time.second();
-    Serial.print(second);
-  }
-  else{
-    hourGood = false;
-    minuteGood = false;
-    secondGood = false;
-  }
-
-  if (gps.speed.isUpdated())
-  {
-    speedGood = true;
-    speed = gps.speed.mps();
-  }
-  else{
-    speedGood = false;
-  }
-
-  if (gps.course.isUpdated())
-  {
-    headingGood = true;
-    heading = gps.course.deg();
-  }
-  else{
-    headingGood = false;
-  }
-
-  if (gps.altitude.isUpdated())
-  {
-    altGood = true;
-    alt = gps.altitude.meters();
-  }
-  else{
-    altGood = false;
-  }
-
-  if (gps.satellites.isUpdated())
-  {
-    numSatsGood = true;
-    numSats = gps.satellites.value(); 
-  }
-  else{
-    numSatsGood = false;
-  }
+  
   //vars [year, month, day, hour, minute, second, altitude, lat, long, heading, speed, numSatellites]
-  //contents = String(hour) + delim + String(minute) + delim + String(second) + delim + String(alt) + delim + String(lat,6) + delim + String(lng,6) + delim +String(heading) + delim +String(speed) + delim +String(numSats);
+  contents = String(hour) + delim + String(minute) + delim + String(second) + delim + String(alt) + delim + String(lat,6) + delim + String(lng,6) + delim +String(heading) + delim +String(speed) + delim +String(numSats);
   
   //Serial.println(contents);
   if(millis() - last > messageFreq){
     last = millis();
-    checkForNans();
-    Serial.println("Here: ");
-    Serial.print(contents);
+    //checkForNans();
+    Serial.println(contents);
     lora.println(contents);
   }
 }
